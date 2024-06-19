@@ -6,7 +6,7 @@
 #include "logging.h"
 #include "calibrator.h"
 #include "Model.h"
-#include "YOLOv8_Common.h"
+#include "YOLOv10_Common.h"
 #include "ModelConfig.h"
 #include "FF_DirFile.h"
 #include "FF_IniParser.h"

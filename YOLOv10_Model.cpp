@@ -1,15 +1,16 @@
+#include <chrono>
 #include "YOLOv10_Model.h"
 
 
 /**
  * @brief Get parameters from config file.
  */
-int yolov8_model_input_width = -1;
-int yolov8_model_input_height = -1;
-int yolov8_num_classes = -1;
-float yolov8_nms_thresh = 0.0;
-float yolov8_bbox_conf_thresh = 0.0;
-std::string yolov8_sub_edition;
+int yolov10_model_input_width = -1;
+int yolov10_model_input_height = -1;
+int yolov10_num_classes = -1;
+float yolov10_nms_thresh = 0.0;
+float yolov10_bbox_conf_thresh = 0.0;
+std::string yolov10_sub_edition;
 
 
 
@@ -24,28 +25,30 @@ YOLOv10_Model::YOLOv10_Model(): Model()
     ParseParams();
     
     /** 输入大小 */
-    mModelInputDataSize = batchsize * 3 * yolov8_model_input_height * yolov8_model_input_width;
+    mModelInputDataSize = batchsize * 3 * yolov10_model_input_height * yolov10_model_input_width;
     
     /** 输出大小 */
     mScoresOutputSize  = batchsize * NAMESPACE_YOLOv10::MAX_OUTPUT_BBOX_COUNT * 1; ///<
     mClassesOutputSize = batchsize * NAMESPACE_YOLOv10::MAX_OUTPUT_BBOX_COUNT * 1; ///<
     mBoxesOutputSize   = batchsize * NAMESPACE_YOLOv10::MAX_OUTPUT_BBOX_COUNT * 4; ///<
 
-    /** Output buffer name */
-    mInputBlobName = "data";
-    mBoxesBlobName    = "BoxesTensor";
-    mScoresBlobName   = "ScoresTensor";
-    mClassesBlobName  = "ClassesTensor";
+    /** 输出节点名. */
+    mInputBlobName   = "data";
+    mBoxesBlobName   = "BoxesTensor";
+    mScoresBlobName  = "ScoresTensor";
+    mClassesBlobName = "ClassesTensor";
 
+    /** 输入Tensor维度信息. */
     mInputDims.nbDims = 4;
     mInputDims.d[0] = batchsize;
     mInputDims.d[1] = 3;
-    mInputDims.d[2] = yolov8_model_input_height;
-    mInputDims.d[3] = yolov8_model_input_width;
+    mInputDims.d[2] = yolov10_model_input_height;
+    mInputDims.d[3] = yolov10_model_input_width;
 
+    /** DFL参数. */
     reg_max = 16;
 
-    /** Preset anchor */
+    /** 预设Anchor. */
     for(int h=0; h<FM0_H; h++){
         for(int w=0; w<FM0_W; w++){
             fm0_anchor_grid[h*80*2 + w*2 + 0] = w*1.0+0.5;
@@ -65,7 +68,7 @@ YOLOv10_Model::YOLOv10_Model(): Model()
         }
     }
 
-    /** Preset stride */
+    /** 预设Stride. */
     for(int i=0; i<(FM0_H*FM0_W+FM1_H*FM1_W+FM2_H*FM2_W); i++){
         if(i<FM0_H*FM0_W){
             stride[i] = 8.0;
@@ -79,6 +82,7 @@ YOLOv10_Model::YOLOv10_Model(): Model()
 
 YOLOv10_Model::~YOLOv10_Model()
 {
+
 }
 
 int YOLOv10_Model::get_width(int x, float gw, int divisor)
@@ -200,9 +204,7 @@ ICudaEngine* YOLOv10_Model::BuildEngine(unsigned int maxBatchSize, IBuilder* bui
     int c2f_16_channel = c2f_16_dim.d[1];
     int c2_app = static_cast<int>(static_cast<float>(c2f_16_channel)/static_cast<float>(4));
     int c2 = std::max(16, std::max(c2_app, 16*4));
-    // printf("[forward_feat] c2: %d\n", c2);
-    int c3 = std::max(c2f_16_channel, std::min(yolov8_num_classes, 100));
-    // printf("[forward_feat] c3: %d\n", c3);
+    int c3 = std::max(c2f_16_channel, std::min(yolov10_num_classes, 100));
     
     /** c2f_16(x0): one2one_cv2 */
     auto forward_feat_cv2_x0_0 = NAMESPACE_YOLOv10::convBlock(network, weightMap, *c2f_16->getOutput(0), c2, 3, 1, 1, "model.23.one2one_cv2.0.0");
@@ -217,7 +219,7 @@ ICudaEngine* YOLOv10_Model::BuildEngine(unsigned int maxBatchSize, IBuilder* bui
     auto forward_feat_cv3_x0_1 = NAMESPACE_YOLOv10::convBlock(network, weightMap, *forward_feat_cv3_x0_0->getOutput(0), c3, 1, 1, 1, "model.23.one2one_cv3.0.0.1");
     auto forward_feat_cv3_x0_2 = NAMESPACE_YOLOv10::convBlock(network, weightMap, *forward_feat_cv3_x0_1->getOutput(0), c3, 3, 1, c3, "model.23.one2one_cv3.0.1.0");
     auto forward_feat_cv3_x0_3 = NAMESPACE_YOLOv10::convBlock(network, weightMap, *forward_feat_cv3_x0_2->getOutput(0), c3, 1, 1, 1, "model.23.one2one_cv3.0.1.1");
-    IConvolutionLayer *forward_feat_cv3_x0 = network->addConvolutionNd(*forward_feat_cv3_x0_3->getOutput(0), yolov8_num_classes, DimsHW{1, 1}, weightMap["model.23.one2one_cv3.0.2.weight"], weightMap["model.23.one2one_cv3.0.2.bias"]); ///< cv2输出
+    IConvolutionLayer *forward_feat_cv3_x0 = network->addConvolutionNd(*forward_feat_cv3_x0_3->getOutput(0), yolov10_num_classes, DimsHW{1, 1}, weightMap["model.23.one2one_cv3.0.2.weight"], weightMap["model.23.one2one_cv3.0.2.bias"]); ///< cv2输出
     forward_feat_cv3_x0->setName(std::string("model.23.forward_feat.one2one_cv3.x0").data());
     forward_feat_cv3_x0->setStrideNd(DimsHW{1, 1}); ///< 默认就是DimsHW{1, 1}, 此处可以不添加
     forward_feat_cv3_x0->setPaddingNd(DimsHW{0, 0});
@@ -261,7 +263,7 @@ ICudaEngine* YOLOv10_Model::BuildEngine(unsigned int maxBatchSize, IBuilder* bui
     auto forward_feat_cv3_x1_1 = NAMESPACE_YOLOv10::convBlock(network, weightMap, *forward_feat_cv3_x1_0->getOutput(0), c3, 1, 1, 1, "model.23.one2one_cv3.1.0.1");
     auto forward_feat_cv3_x1_2 = NAMESPACE_YOLOv10::convBlock(network, weightMap, *forward_feat_cv3_x1_1->getOutput(0), c3, 3, 1, c3, "model.23.one2one_cv3.1.1.0");
     auto forward_feat_cv3_x1_3 = NAMESPACE_YOLOv10::convBlock(network, weightMap, *forward_feat_cv3_x1_2->getOutput(0), c3, 1, 1, 1, "model.23.one2one_cv3.1.1.1");
-    IConvolutionLayer *forward_feat_cv3_x1 = network->addConvolutionNd(*forward_feat_cv3_x1_3->getOutput(0), yolov8_num_classes, DimsHW{1, 1}, weightMap["model.23.one2one_cv3.1.2.weight"], weightMap["model.23.one2one_cv3.1.2.bias"]); ///< cv2输出
+    IConvolutionLayer *forward_feat_cv3_x1 = network->addConvolutionNd(*forward_feat_cv3_x1_3->getOutput(0), yolov10_num_classes, DimsHW{1, 1}, weightMap["model.23.one2one_cv3.1.2.weight"], weightMap["model.23.one2one_cv3.1.2.bias"]); ///< cv2输出
     forward_feat_cv3_x1->setName(std::string("model.23.forward_feat.one2one_cv3.x1").data());
     forward_feat_cv3_x1->setStrideNd(DimsHW{1, 1}); ///< 默认就是DimsHW{1, 1}, 此处可以不添加
     forward_feat_cv3_x1->setPaddingNd(DimsHW{0, 0});
@@ -305,7 +307,7 @@ ICudaEngine* YOLOv10_Model::BuildEngine(unsigned int maxBatchSize, IBuilder* bui
     auto forward_feat_cv3_x2_1 = NAMESPACE_YOLOv10::convBlock(network, weightMap, *forward_feat_cv3_x2_0->getOutput(0), c3, 1, 1, 1, "model.23.one2one_cv3.2.0.1");
     auto forward_feat_cv3_x2_2 = NAMESPACE_YOLOv10::convBlock(network, weightMap, *forward_feat_cv3_x2_1->getOutput(0), c3, 3, 1, c3, "model.23.one2one_cv3.2.1.0");
     auto forward_feat_cv3_x2_3 = NAMESPACE_YOLOv10::convBlock(network, weightMap, *forward_feat_cv3_x2_2->getOutput(0), c3, 1, 1, 1, "model.23.one2one_cv3.2.1.1");
-    IConvolutionLayer *forward_feat_cv3_x2 = network->addConvolutionNd(*forward_feat_cv3_x2_3->getOutput(0), yolov8_num_classes, DimsHW{1, 1}, weightMap["model.23.one2one_cv3.2.2.weight"], weightMap["model.23.one2one_cv3.2.2.bias"]); ///< cv2输出
+    IConvolutionLayer *forward_feat_cv3_x2 = network->addConvolutionNd(*forward_feat_cv3_x2_3->getOutput(0), yolov10_num_classes, DimsHW{1, 1}, weightMap["model.23.one2one_cv3.2.2.weight"], weightMap["model.23.one2one_cv3.2.2.bias"]); ///< cv2输出
     forward_feat_cv3_x2->setName(std::string("model.23.forward_feat.one2one_cv3.x2").data());
     forward_feat_cv3_x2->setStrideNd(DimsHW{1, 1}); ///< 默认就是DimsHW{1, 1}, 此处可以不添加
     forward_feat_cv3_x2->setPaddingNd(DimsHW{0, 0});
@@ -349,12 +351,6 @@ ICudaEngine* YOLOv10_Model::BuildEngine(unsigned int maxBatchSize, IBuilder* bui
     auto cls = network->addConcatenation(cls_cat_tensors, 3);
     cls->setAxis(2);
 
-    // Dims cls_dims = cls->getOutput(0)->getDimensions();
-    // printf("cls_dims.ndims: %d \n", cls_dims.nbDims);
-    // for(int i=0; i<cls_dims.nbDims; i++){
-    //     printf("dim[%d]: %d \n", i, cls_dims.d[i]);
-    // }
-
     /** DFL(regression_box) */
     // if(reg_max > 1){
         Dims regression_box_dims = regression_box->getOutput(0)->getDimensions();
@@ -387,12 +383,6 @@ ICudaEngine* YOLOv10_Model::BuildEngine(unsigned int maxBatchSize, IBuilder* bui
         auto box = network->addShuffle(*dfl_box->getOutput(0)); 
         box->setReshapeDimensions(dfl_box_reshape_dims); ///< shape(1, 4, anchors)
 
-    // }
-
-    // Dims box_dims = box->getOutput(0)->getDimensions();
-    // printf("box_dims.ndims: %d \n", box_dims.nbDims);
-    // for(int i=0; i<box_dims.nbDims; i++){
-    //     printf("dim[%d]: %d \n", i, box_dims.d[i]);
     // }
 
     /** Resolve dbox results 
@@ -438,22 +428,10 @@ ICudaEngine* YOLOv10_Model::BuildEngine(unsigned int maxBatchSize, IBuilder* bui
     auto box_lt = network->addSlice(*box->getOutput(0), Dims{3, {0, 0, 0}}, Dims{3, {dfl_conv_dim.d[0], 2, dfl_conv_dim.d[2]}}, Dims{3, {1, 1, 1}});
     auto box_rb = network->addSlice(*box->getOutput(0), Dims{3, {0, 2, 0}}, Dims{3, {dfl_conv_dim.d[0], 2, dfl_conv_dim.d[2]}}, Dims{3, {1, 1, 1}});
 
-    // Dims AnchorGrid_2_dims = AnchorGrid_2->getOutput(0)->getDimensions();
-    // printf("AnchorGrid_2_dims.ndims: %d \n", AnchorGrid_2_dims.nbDims);
-    // for(int i=0; i<AnchorGrid_2_dims.nbDims; i++){
-    //     printf("dim[%d]: %d \n", i, AnchorGrid_2_dims.d[i]);
-    // }
-
-    // Dims box_lt_dims = box_lt->getOutput(0)->getDimensions();
-    // printf("box_lt_dims.ndims: %d \n", box_lt_dims.nbDims);
-    // for(int i=0; i<box_lt_dims.nbDims; i++){
-    //     printf("dim[%d]: %d \n", i, box_lt_dims.d[i]);
-    // }
-
     auto box_lt_primitive = network->addElementWise(*AnchorGrid_2->getOutput(0), *box_lt->getOutput(0), ElementWiseOperation::kSUB); ///< anchor_grid - box_lt
-    // box_lt_primitive->setName("box_lt_primitive");
+    box_lt_primitive->setName("box_lt_primitive");
     auto box_rb_primitive = network->addElementWise(*AnchorGrid_2->getOutput(0), *box_rb->getOutput(0), ElementWiseOperation::kSUM); ///< anchor_grid + box_rb
-    // box_rb_primitive->setName("box_rb_primitive");
+    box_rb_primitive->setName("box_rb_primitive");
 
 
     ITensor* DboxTensor[] = {box_lt_primitive->getOutput(0), box_rb_primitive->getOutput(0)};
@@ -461,14 +439,10 @@ ICudaEngine* YOLOv10_Model::BuildEngine(unsigned int maxBatchSize, IBuilder* bui
     dbox->setAxis(1);
 
     /**
-     * OUTPUT
+     * Outputs
      */
     auto box_raw = network->addElementWise(*dbox->getOutput(0), *stride_constant->getOutput(0), ElementWiseOperation::kPROD); ///< * stride, shape(1, 4, anchors)
     auto cls_raw = network->addActivation(*cls->getOutput(0), ActivationType::kSIGMOID); ///< shape(1, 48, anchors)
-
-    // auto box = network->addShuffle(*dfl_box->getOutput(0)); 
-    // box->setReshapeDimensions(dfl_box_reshape_dims); ///< shape(1, 4, anchors)
-
 
     /**  
      * [SAI-KEY] Postprocess
@@ -481,18 +455,6 @@ ICudaEngine* YOLOv10_Model::BuildEngine(unsigned int maxBatchSize, IBuilder* bui
     auto cls_top1_s1 = network->addTopK(*cls_raw->getOutput(0), TopKOperation::kMAX, 1, 0x02); ///< shape(1, 48, M)->shape(1, 1, anchors)
     // Dims cls_top1_s1_value_dim = cls_top1_s1->getOutput(0)->getDimensions();
     // Dims cls_top1_s1_index_dim = cls_top1_s1->getOutput(1)->getDimensions();
-
-    // printf("cls_top1_s1->getOutput(0)->type: %d \n", cls_top1_s1->getOutput(0)->getType());
-    // printf("cls_top1_s1_value_dim.ndims: %d \n", cls_top1_s1_value_dim.nbDims);
-    // for(int i=0; i<cls_top1_s1_value_dim.nbDims; i++){
-    //     printf("dim[%d]: %d \n", i, cls_top1_s1_value_dim.d[i]);
-    // }
-
-    // printf("cls_top1_s1->getOutput(1)->type: %d \n", cls_top1_s1->getOutput(1)->getType());
-    // printf("cls_top1_s1_index_dim.ndims: %d \n", cls_top1_s1_index_dim.nbDims);
-    // for(int i=0; i<cls_top1_s1_index_dim.nbDims; i++){
-    //     printf("dim[%d]: %d \n", i, cls_top1_s1_index_dim.d[i]);
-    // }
 
     /**
      * 执行topK操作，挑选出得分最大的前MAX_OUTPUT_BBOX_COUNT个cell
@@ -522,13 +484,6 @@ ICudaEngine* YOLOv10_Model::BuildEngine(unsigned int maxBatchSize, IBuilder* bui
     box_output->setFirstTranspose(Permutation{0, 2, 1});
     /** box_output为shape(1, 100, 4)的Tensor. */
 
-    Dims box_output_dim = box_output->getOutput(0)->getDimensions();
-    printf("box_output->type: %d \n", box_output->getType());
-    printf("box_output_dim.ndims: %d \n", box_output_dim.nbDims);
-    for(int i=0; i<box_output_dim.nbDims; i++){
-        printf("dim[%d]: %d \n", i, box_output_dim.d[i]);
-    }
-
     /**
      * cls_top1_s2 : scores,  flaot, shape(1, MAX_OUTPUT_BBOX_COUNT)
      * class_output: classes, int32, shape(1, MAX_OUTPUT_BBOX_COUNT)
@@ -555,7 +510,7 @@ ICudaEngine* YOLOv10_Model::BuildEngine(unsigned int maxBatchSize, IBuilder* bui
         std::cout << "Your platform support int8: " << (builder->platformHasFastInt8() ? "true" : "false") << std::endl;
         assert(builder->platformHasFastInt8());
         config->setFlag(BuilderFlag::kINT8);
-        Int8EntropyCalibrator2 *calibrator = new Int8EntropyCalibrator2(1, yolov8_model_input_width, yolov8_model_input_height, "./coco_calib/", "int8calib.table", mInputBlobName);
+        Int8EntropyCalibrator2 *calibrator = new Int8EntropyCalibrator2(1, yolov10_model_input_width, yolov10_model_input_height, "./coco_calib/", "int8calib.table", mInputBlobName);
         config->setInt8Calibrator(calibrator);
     }else if(compute_mode == FP16){
         config->setFlag(BuilderFlag::kFP16);
@@ -628,6 +583,7 @@ int YOLOv10_Model::CreateEngine(std::string wts_file, ComputationMode compute_mo
 
 int YOLOv10_Model::Infer(std::string eval_src_dir, std::string eval_dst_dir)
 {
+    /** 读取本地引擎序列化文件. */
     std::ifstream file(EnginePath, std::ios::binary);
     if (file.good()) {
         file.seekg(0, file.end);
@@ -639,6 +595,13 @@ int YOLOv10_Model::Infer(std::string eval_src_dir, std::string eval_dst_dir)
         file.close();
     }
 
+    /** 文件列表. */
+    std::vector<std::string> file_names;
+    if (FF_DirFile::ListDir(eval_src_dir.c_str(), file_names) < 0) {
+        return -1;
+    }
+
+    /** 反序列化模型. */
     IRuntime* runtime = createInferRuntime(gLogger);
     assert(runtime != nullptr);
     ICudaEngine* engine = runtime->deserializeCudaEngine(trtModelStream, size);
@@ -685,17 +648,9 @@ int YOLOv10_Model::Infer(std::string eval_src_dir, std::string eval_dst_dir)
     CUDA_CHECK(cudaMalloc(&buffers[boxes_output_index],   batchsize * mBoxesOutputSize * sizeof(float)));
 
 #if 0
-    /** [SAI-GDB] */
-    Dims output_dims = engine->getBindingDimensions(boxes_output_index);
-    SLOG_FMT_INFO("[EngineGen] output_dims.nbDims: %d", output_dims.nbDims);
-    for(int i=0; i<output_dims.nbDims; i++){
-        SLOG_FMT_INFO("[EngineGen] dim: %d", output_dims.d[i]);
-    }
-#endif
-
     printf("[SAI-INFER] Read txt image...\n");
     std::string ins;
-    std::ifstream image_f("/zqpe/1009_TRT_YOLOv10/004_Evals/001_Src/txt/image.txt");
+    std::ifstream image_f("/zqpe/1009_TRT_YOLOv10/004_Evals/001_Src/txt/image_0.txt");
     int i = 0;
     for(int line=0; line<(3*384*640); line++){ ///< [SAI-KP]注意数据大小
         getline(image_f, ins);
@@ -703,12 +658,71 @@ int YOLOv10_Model::Infer(std::string eval_src_dir, std::string eval_dst_dir)
         i++;
     }
     image_f.close();
-    printf("[SAI-INFER] Do inference...\n");
-    DoInference(*context, stream, buffers, data, (void**)ScoresOutputFloat, (void**)ClassesOutputInt32, (void**)BoxesOutputFloat, mInputDims);
+    std::chrono::time_point<std::chrono::high_resolution_clock> high_res_time_tic;
+    std::chrono::time_point<std::chrono::high_resolution_clock> high_res_time_toc;
+
+    while(1){
+        high_res_time_tic = std::chrono::high_resolution_clock::now();
+        DoInference(*context, stream, buffers, data, (void**)ScoresOutputFloat, (void**)ClassesOutputInt32, (void**)BoxesOutputFloat, mInputDims);
+        high_res_time_toc = std::chrono::high_resolution_clock::now();
+        std::chrono::milliseconds infer_duration = std::chrono::duration_cast<std::chrono::milliseconds>(high_res_time_toc - high_res_time_tic);
+        printf("Inference takes %d ms\n", (int)(infer_duration.count()));
+    }
+
+    // for(int s=0; s<100; s++){
+    //     printf("%d: %f\n", s, ScoresOutputFloat[0][s]);
+    // }
 
     for(int s=0; s<100; s++){
         printf("%d: %f\n", s, BoxesOutputFloat[0][s]);
     }
+
+    // for(int s=0; s<100; s++){
+    //     printf("%d: %d\n", s, ClassesOutputInt32[0][s]);
+    // }
+#else
+    int fcount = 0;
+    std::chrono::time_point<std::chrono::high_resolution_clock> high_res_time_tic;
+    std::chrono::time_point<std::chrono::high_resolution_clock> high_res_time_toc;
+    for (auto f: file_names) {
+        fcount++;
+        std::cout << fcount << "  " << f << std::endl;
+        cv::Mat img = cv::imread(eval_src_dir + "/" + f);
+        if (img.empty()) continue;
+        cv::Mat pr_img = preprocess_img_letterbox_minrect(img, yolov10_model_input_height, yolov10_model_input_width, 32, true); ///< LetterBox-MinRect
+        for (int i = 0; i < yolov10_model_input_height * yolov10_model_input_width; i++) { ///< HWC2CHW, 归一化
+            data[i] = pr_img.at<cv::Vec3b>(i)[2] / 255.0;
+            data[i + yolov10_model_input_height * yolov10_model_input_width] = pr_img.at<cv::Vec3b>(i)[1] / 255.0;
+            data[i + 2 * yolov10_model_input_height * yolov10_model_input_width] = pr_img.at<cv::Vec3b>(i)[0] / 255.0;
+        }
+
+        /** 计时开始 */
+        high_res_time_tic = std::chrono::high_resolution_clock::now();
+        /** 推理 */
+        DoInference(*context, stream, buffers, data, (void**)ScoresOutputFloat, (void**)ClassesOutputInt32, (void**)BoxesOutputFloat, mInputDims);
+        /** 计时结束 */
+        high_res_time_toc = std::chrono::high_resolution_clock::now();
+        
+        std::chrono::milliseconds infer_duration = std::chrono::duration_cast<std::chrono::milliseconds>(high_res_time_toc - high_res_time_tic);
+        printf("Inference takes %d ms\n", (int)(infer_duration.count()));
+
+        /** Parsing outputs. */
+        std::vector<Detection> res;
+        res.clear();
+        filter_detections(res, NAMESPACE_YOLOv10::MAX_OUTPUT_BBOX_COUNT, ScoresOutputFloat[0], ClassesOutputInt32[0], BoxesOutputFloat[0], yolov10_bbox_conf_thresh);
+        
+        for (size_t j = 0; j < res.size(); j++){
+                cv::Rect r = get_rect(img.cols, img.rows, res[j].bbox, yolov10_model_input_height, yolov10_model_input_width, false); ///< xyxy
+                cv::rectangle(img, r, cv::Scalar(0, 129, 255), 2);
+                cv::putText(img, std::to_string((int)res[j].class_id), cv::Point(r.x, r.y - 1), cv::FONT_HERSHEY_PLAIN, 1.2, cv::Scalar(0xFF, 0xFF, 0xFF), 2);
+        }
+        if(!FF_Path::CheckPathExists_stat(eval_dst_dir)){
+            FF_Path::MkPath(eval_dst_dir);
+        }
+        cv::imwrite(eval_dst_dir + f, img);
+    }
+
+#endif
 
     /** Release stream and buffers. */
     cudaStreamDestroy(stream);
@@ -785,55 +799,55 @@ int YOLOv10_Model::ParseParams()
     std::cout << "Parse YOLOv10 params" << std::endl;
     str_value = ini_parser.Parse("YOLOv10", "SUB_EDITION");
     if(str_value != ""){
-        yolov8_sub_edition = str_value;
+        yolov10_sub_edition = str_value;
     }
 
-    if(yolov8_sub_edition == "l"){
+    if(yolov10_sub_edition == "l"){
         global_depth = 1.0;
         global_width = 1.0;
-    }if(yolov8_sub_edition == "m"){
+    }if(yolov10_sub_edition == "m"){
         global_depth = 0.67;
         global_width = 0.75;
-    }if(yolov8_sub_edition == "n"){
+    }if(yolov10_sub_edition == "n"){
         global_depth = 0.33;
         global_width = 0.25;
     }
 
     str_value = ini_parser.Parse("YOLOv10", "NUM_CLASSES");
     if(str_value != ""){
-        yolov8_num_classes = atoi(str_value.c_str());
+        yolov10_num_classes = atoi(str_value.c_str());
     }
 
     str_value = ini_parser.Parse("YOLOv10", "INPUT_WIDTH");
     if(str_value != ""){
-        yolov8_model_input_width = atoi(str_value.c_str());
+        yolov10_model_input_width = atoi(str_value.c_str());
     }
 
     str_value = ini_parser.Parse("YOLOv10", "INPUT_HEIGHT");
     if(str_value != ""){
-        yolov8_model_input_height = atoi(str_value.c_str());
+        yolov10_model_input_height = atoi(str_value.c_str());
     }
 
     str_value = ini_parser.Parse("YOLOv10", "BBOX_CONF");
     if(str_value != ""){
-        yolov8_bbox_conf_thresh = atof(str_value.c_str());
+        yolov10_bbox_conf_thresh = atof(str_value.c_str());
     }
     str_value = ini_parser.Parse("YOLOv10", "NMS_THRESH");
     if(str_value != ""){
-        yolov8_nms_thresh = atof(str_value.c_str());
+        yolov10_nms_thresh = atof(str_value.c_str());
     }
     
 
 #if 1
     SLOG_FMT_INFO("[EngineGen] ENGINE_PATH: %s",    EnginePath.c_str());
-    SLOG_FMT_INFO("[EngineGen] SUB_EDITION: %s",    yolov8_sub_edition.c_str());
+    SLOG_FMT_INFO("[EngineGen] SUB_EDITION: %s",    yolov10_sub_edition.c_str());
     SLOG_FMT_INFO("[EngineGen] DEPTH_MULTIPLE: %f", global_depth);
     SLOG_FMT_INFO("[EngineGen] WIDTH_MULTIPLE: %f", global_width);
-    SLOG_FMT_INFO("[EngineGen] NUM_CLASSES: %d",    yolov8_num_classes);
-    SLOG_FMT_INFO("[EngineGen] INPUT_WIDTH: %d",    yolov8_model_input_width);
-    SLOG_FMT_INFO("[EngineGen] INPUT_HEIGHT: %d",   yolov8_model_input_height);
-    SLOG_FMT_INFO("[EngineGen] BBOX_CONF: %f",      yolov8_bbox_conf_thresh);
-    SLOG_FMT_INFO("[EngineGen] NMS_THRESH: %f",     yolov8_nms_thresh);
+    SLOG_FMT_INFO("[EngineGen] NUM_CLASSES: %d",    yolov10_num_classes);
+    SLOG_FMT_INFO("[EngineGen] INPUT_WIDTH: %d",    yolov10_model_input_width);
+    SLOG_FMT_INFO("[EngineGen] INPUT_HEIGHT: %d",   yolov10_model_input_height);
+    SLOG_FMT_INFO("[EngineGen] BBOX_CONF: %f",      yolov10_bbox_conf_thresh);
+    SLOG_FMT_INFO("[EngineGen] NMS_THRESH: %f",     yolov10_nms_thresh);
 #endif
 
 
